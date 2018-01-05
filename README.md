@@ -1,1 +1,1 @@
-caffe_weight_converter
+README will follow soon.
