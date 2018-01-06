@@ -32,7 +32,7 @@ The bad news is that you need to have Caffe with Pycaffe installed to use this c
 
 ### How to use it
 
-##### 1. Command line interface
+#### 1. Command line interface
 
 The command line interface takes three positional arguments in this order:
 * `out_file`: The desired file name (including path) for the output file without the file extension. The file extension will be added by the converter and is `.h5` for HDF5 files and `.pkl` for pickle files.
@@ -58,7 +58,7 @@ For more details about the available options, execute
 python caffe_weight_converter.py --help
 ```
 
-##### 2. Use within another Python program or Jupyter notebook
+#### 2. Use within another Python program or Jupyter notebook
 
 ```python
 from caffe_weight_converter import convert_caffemodel_to_keras, convert_caffemodel_to_dict
