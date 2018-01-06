@@ -17,73 +17,27 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
+import os
+os.environ['GLOG_minloglevel'] = '2' # Prevents Caffe from printing sooo much stuff to the console.
 import caffe
-import pickle
-import h5py
+os.environ['GLOG_minloglevel'] = '0'
 import numpy as np
 import warnings
+import argparse
+try:
+    import pickle
+except ImportError:
+    warnings.warn("'pickle' module is missing. You can export the weights to an HDF5 file only.")
+try:
+    import h5py
+except ImportError:
+    warning.warn("'h5py' module is missing. You can export the weights to a pickle file only.")
 
-
-def convert_caffemodel_to_dict(prototxt_filename, caffemodel_filename, out_path=None):
-    '''
-    Extracts the weights from a Caffe model into a simple structure of
-    Python lists, dictionaries and Numpy arrays.
-
-    Arguments:
-        prototxt_filename (str): The full path to the `.prototxt` file that defines
-            the Caffe model.
-        caffemodel_filename (str): The full path to the `.caffemodel` file that
-            contains the weights for this Caffe model.
-        out_path (str, optional): If a path is passed, the extracted weights will be
-            saved to disk as a pickled file under the specified file path. If `None`,
-            then the extracted weights will not be saved to disk.
-
-    Returns:
-        A list of dictionaries. Each dictionary contains the data for one layer of the
-        model. The data contained in each dictionary can be accessed by the following keys:
-
-            'name':    The name of the layer.
-            'type':    The type of the layer, e.g. 'Convolution'.
-            'weights': The weights of the layer as a list of Numpy arrays.
-            'bottoms': The names and shapes of all inputs into the layer.
-            'tops':    The names and shapes of all outputs from the layer.
-
-        In case a layer has no weights, the weights list will be empty.
-    '''
-    # Load the Caffe net and weights.
-    net = caffe.Net(prototxt_filename, 1, weights=caffemodel_filename)
-    # Store the weights and other information for each layer in this list.
-    layer_list = []
-    for li in range(len(net.layers)): # For each layer in the net...
-        # ...store the weights and other relevant information in this dictionary.
-        layer = {}
-        # Store the layer name.
-        layer['name'] = net._layer_names[li]
-        # Store the layer type.
-        layer['type'] = net.layers[li].type
-        # Store the layer weights. In case the layer has no weights, this list will be empty.
-        layer['weights'] = [net.layers[li].blobs[bi].data[...]
-                            for bi in range(len(net.layers[li].blobs))]
-        # Store the names and shapes of each input to this layer (aka "bottom").
-        layer['bottoms'] = [(net._blob_names[bi], net.blobs[net._blob_names[bi]].data.shape)
-                             for bi in list(net._bottom_ids(li))]
-        # Store the names and shapes of each output of this layer (aka "top").
-        layer['tops'] = [(net._blob_names[bi], net.blobs[net._blob_names[bi]].data.shape)
-                          for bi in list(net._top_ids(li))]
-        layer_list.append(layer)
-
-    if not (out_path is None):
-        with open('{}.pkl'.format(out_path), 'wb') as f:
-            pickle.dump(layer_list, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print('File saved as {}.pkl'.format(out_path))
-
-    return layer_list
-
-def convert_caffemodel_to_keras(output_h5_filename,
+def convert_caffemodel_to_keras(output_filename,
                                 prototxt_filename,
                                 caffemodel_filename,
                                 include_layers_without_weights=False,
-                                include_unsupported_layer_types=True,
+                                include_unknown_layer_types=True,
                                 keras_backend='tf',
                                 verbose=True):
     '''
@@ -91,13 +45,15 @@ def convert_caffemodel_to_keras(output_h5_filename,
     compatible with Keras 2.x with TensorFlow backend. The Theano and CNTK backends
     are currently not supported.
 
+    Note that this converter converts the weights only, not the model definition.
+
     The most painfree way to use this weight converter is to leave the
     `include_layers_without_weights` option deactivated and load the weights into
     an appropriate Keras model by setting `by_name = True` in the `Model.load_weights()`
     method.
 
     This converter can handle all layer types, but it is not guaranteed to perform
-    the conversion correctly for unsupported layer types. What this means concretely
+    the conversion correctly for unknown layer types. What this means concretely
     is that the converter can always extract the weights from a Caffe model and
     put them into the Keras-compatible HDF5 format regardless of the layer type,
     but some layer types may need processing on top of that that the converter
@@ -107,15 +63,16 @@ def convert_caffemodel_to_keras(output_h5_filename,
        the weights in the order they have in the Caffe model. If this happens
        not to be the same order in which Keras saves the weights for that same
        layer type, then we obviously have a problem. For supported layer types
-       it is ensured that the order is correct, but for a given unsupported layer
+       it is ensured that the order is correct, but for a given unknown layer
        type this may or may not be the case.
     2) If the weights of a layer type need to be processed in a certain way,
-       the converter is not going to know about this for unsupported layers.
+       the converter is not going to know about this for unknown layer types.
        For example, the axes of the kernels of convolutional layers need to be
        transposed between Caffe and Keras with TensorFlow backend. Similar processing
-       might be necessary for other (unsupported) layer types, so be aware of that.
+       might be necessary for the weights of other (unknown) layer types to work
+       correctly, so be aware of that.
 
-    The currently supported Caffe layer types are:
+    The currently supported (i.e. known) Caffe layer types are:
     - Convolution
     - InnerProduct
     - BatchNorm
@@ -125,7 +82,7 @@ def convert_caffemodel_to_keras(output_h5_filename,
     corresponding 'BatchNorm' layers in the Caffe model, not the 'Scale' layers.
 
     Arguments:
-        output_h5_filename (str): The filename (full path including file extension)
+        output_filename (str): The filename (full path, but excluding the file extension)
             under which to save the HDF5 file with the converted weights.
         prototxt_filename (str): The filename (full path including file extension)
             of the `.prototxt` file that defines the Caffe model.
@@ -139,8 +96,9 @@ def convert_caffemodel_to_keras(output_h5_filename,
             in the output file, then set this option to `True`. Defaults to `False`.
             Note: If `False`, then you should load the weights into the Keras model
             `by_name = True`, since not all layers are present in the HDF5 file.
-        include_unsupported_layer_types (bool, optional): If `True`, unknown layer
-            types will be skipped. It is recommended that you keep this option
+        include_unknown_layer_types (bool, optional): If `True`, weights from unknown layer
+            types will be included, even though it is not guaranteed that they will be
+            converted correctly. It is recommended that you keep this option
             activated, see if the converted weights work correctly, and only deactivate
             this option in case they don't.
         keras_backend (str, optional): For which Keras backend to convert the weights.
@@ -154,14 +112,21 @@ def convert_caffemodel_to_keras(output_h5_filename,
     Returns:
         None.
     '''
+    if keras_backend != 'tf':
+        raise ValueError("Only the TensorFlow backend is supported at the moment.")
+
     # Create a list of the Caffe model weights as Numpy arrays stored in dictionaries.
     # The reason why we use dictionaries is that we don't only store the weights themselves,
     # but also other information like the layer name, layer type, tops, and bottoms (tops = outputs,
     # bottoms = inputs for the non-Caffe people) for each layer.
-    caffe_weights_list = convert_caffemodel_to_dict(prototxt_filename, caffemodel_filename, out_path=None)
+    caffe_weights_list = convert_caffemodel_to_dict(prototxt_filename,
+                                                    caffemodel_filename,
+                                                    out_path=None,
+                                                    verbose=False)
 
     # Create the HDF5 file in which to save the extracted weights.
-    out = h5py.File(output_h5_filename, 'w')
+    out_name = '{}.h5'.format(output_filename)
+    out = h5py.File(out_name, 'w')
 
     # Save the layer names in this list.
     layer_names = []
@@ -238,7 +203,6 @@ def convert_caffemodel_to_keras(output_h5_filename,
                 group = out.create_group(layer_name)
                 # Create a weight names attribute for this group, which is just a list of the names of the weights
                 # that this layer is expected to have in the Keras model.
-                # This is how Keras matches the names of weights within the layer.
                 group.attrs.create(name='weight_names', data=extended_weight_names)
                 # Create a subgroup (i.e. subfolder) in which to save the weights of this layer.
                 subgroup = group.create_group(layer_name)
@@ -249,7 +213,7 @@ def convert_caffemodel_to_keras(output_h5_filename,
                 layer_names.append(layer_name.encode())
                 if verbose:
                     print("Converted weights for layer '{}' of type '{}'".format(layer_name, layer_type))
-            elif include_unsupported_layer_types: # For all other (unsupported) layer types...
+            elif (len(layer['weights']) > 0) and include_unknown_layer_types: # For all other (unsupported) layer types...
                 # Set the weight names for this layer type.
                 weight_names = ['weights_{}'.format(i) for i in range(len(layer['weights']))]
                 # Compose the extended weight names with layer name prefix.
@@ -258,7 +222,6 @@ def convert_caffemodel_to_keras(output_h5_filename,
                 group = out.create_group(layer_name)
                 # Create a weight names attribute for this group, which is just a list of the names of the weights
                 # that this layer is expected to have in the Keras model.
-                # This is how Keras matches the names of weights within the layer.
                 group.attrs.create(name='weight_names', data=extended_weight_names)
                 # Create a subgroup (i.e. subfolder) in which to save the weights of this layer.
                 subgroup = group.create_group(layer_name)
@@ -268,7 +231,19 @@ def convert_caffemodel_to_keras(output_h5_filename,
                 # One last thing left to do: Append this layer's name to the global list of layer names.
                 layer_names.append(layer_name.encode())
                 if verbose:
-                    print("Converted weights for layer '{}' of type '{}'".format(layer_name, layer_type))
+                    print("Converted weights for layer '{}' of unknown type '{}'".format(layer_name, layer_type))
+            elif (len(layer['weights']) == 0):
+                # Create a group (i.e. folder) named after this layer.
+                group = out.create_group(layer_name)
+                # Create a weight names attribute for this group, which is just a list of the names of the weights
+                # that this layer is expected to have in the Keras model.
+                group.attrs.create(name='weight_names', data=np.array([]))
+                # Create a subgroup (i.e. subfolder) in which to save the weights of this layer.
+                subgroup = group.create_group(layer_name)
+                # One last thing left to do: Append this layer's name to the global list of layer names.
+                layer_names.append(layer_name.encode())
+                if verbose:
+                    print("Processed layer '{}' of type '{}' which doesn't have any weights".format(layer_name, layer_type))
             elif verbose:
                 print("Skipped unsupported layer '{}' of type '{}'".format(layer_name, layer_type))
         elif verbose:
@@ -283,5 +258,112 @@ def convert_caffemodel_to_keras(output_h5_filename,
     out.attrs.create(name='keras_version', data=b'2.0.8')
     # We're done, close the output file.
     out.close()
+    print("Weight conversion complete.")
+    print('File saved as {}'.format(out_name))
+
+def convert_caffemodel_to_dict(prototxt_filename,
+                               caffemodel_filename,
+                               out_path=None,
+                               verbose=False):
+    '''
+    Extracts the weights from a Caffe model into a simple structure of
+    Python lists, dictionaries and Numpy arrays.
+
+    Arguments:
+        prototxt_filename (str): The full path to the `.prototxt` file that defines
+            the Caffe model.
+        caffemodel_filename (str): The full path to the `.caffemodel` file that
+            contains the weights for this Caffe model.
+        out_path (str, optional): The filename (full path, but excluding the file extension)
+            under which to save a pickled file with the extracted weights. If `None`,
+            then the extracted weights will not be saved to disk.
+
+    Returns:
+        A list of dictionaries. Each dictionary contains the data for one layer of the
+        model. The data contained in each dictionary can be accessed by the following keys:
+
+            'name':    The name of the layer.
+            'type':    The type of the layer, e.g. 'Convolution'.
+            'weights': The weights of the layer as a list of Numpy arrays.
+            'bottoms': The names and shapes of all inputs into the layer.
+            'tops':    The names and shapes of all outputs from the layer.
+
+        In case a layer has no weights, the weights list will be empty.
+    '''
+    # Load the Caffe net and weights.
+    net = caffe.Net(prototxt_filename, 1, weights=caffemodel_filename)
+    # Store the weights and other information for each layer in this list.
+    layer_list = []
+    for li in range(len(net.layers)): # For each layer in the net...
+        # ...store the weights and other relevant information in this dictionary.
+        layer = {}
+        # Store the layer name.
+        layer['name'] = net._layer_names[li]
+        # Store the layer type.
+        layer['type'] = net.layers[li].type
+        # Store the layer weights. In case the layer has no weights, this list will be empty.
+        layer['weights'] = [net.layers[li].blobs[bi].data[...]
+                            for bi in range(len(net.layers[li].blobs))]
+        # Store the names and shapes of each input to this layer (aka "bottom").
+        layer['bottoms'] = [(net._blob_names[bi], net.blobs[net._blob_names[bi]].data.shape)
+                             for bi in list(net._bottom_ids(li))]
+        # Store the names and shapes of each output of this layer (aka "top").
+        layer['tops'] = [(net._blob_names[bi], net.blobs[net._blob_names[bi]].data.shape)
+                          for bi in list(net._top_ids(li))]
+        layer_list.append(layer)
+        if verbose:
+            print("Processed layer '{}' of type '{}'".format(layer['name'], layer['type']))
+
     if verbose:
-        print("Weight conversion complete.")
+        print("Weight extraction complete.")
+
+    if not (out_path is None):
+        out_name = '{}.pkl'.format(out_path)
+        with open(out_name, 'wb') as f:
+            pickle.dump(layer_list, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print('File saved as {}.'.format(out_name))
+
+    return layer_list
+
+def main(argv):
+    if argv.format == 'hdf5':
+        convert_caffemodel_to_keras(output_filename=argv.out_file,
+                                    prototxt_filename=argv.prototxt,
+                                    caffemodel_filename=argv.caffemodel,
+                                    include_layers_without_weights=argv.include_non_weight,
+                                    include_unknown_layer_types=not(argv.skip_unknown),
+                                    keras_backend=argv.backend,
+                                    verbose=argv.verbose)
+    elif argv.format == 'pickle':
+        _ = convert_caffemodel_to_dict(prototxt_filename=argv.prototxt,
+                                       caffemodel_filename=argv.caffemodel,
+                                       out_path=argv.out_file,
+                                       verbose=argv.verbose)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=('Converts `.caffemodel` weights to either of '
+                                                  '(1) Keras-compatible HDF5 format or '
+                                                  '(2) a more general Python list of dictionaries suitable for further processing.'))
+    parser.add_argument('out_file', action='store', type=str, help='The output filename as the full path, but excluding the file extension.')
+    parser.add_argument('prototxt', action='store', type=str, help='The filename (full path including file extension) of the `.prototxt` file that defines the Caffe model. ')
+    parser.add_argument('caffemodel', action='store', type=str, help='The filename (full path including file extension) of the `.caffemodel` file that contains the weights for the Caffe model.')
+    parser.add_argument('-f', '--format', action='store', type=str, default='hdf5', choices={'hdf5', 'pickle'}, help="To which format to export the weights. Choices are {%(choices)s}, and the default is %(default)s. "
+                                                                                                           "If the HDF5 format is selected, the converted weights will be compatible with Keras 2.x. "
+                                                                                                           "If the Pickle format is selected, the weights will be exported to a more general Python list of "
+                                                                                                           "dictionaries that contain the weights as Numpy arrays, along with other information such as "
+                                                                                                           "layer names and types. This format may be useful if you want to process the weights further "
+                                                                                                           "after exporting them.")
+    parser.add_argument('-n', '--include_non_weight', action='store_true', default=False, help="This option is only relevant if the output format is HDF5. Include layers that have no weights "
+                                                                                               "(e.g. Input, Reshape, or ReLU layers) in the converted weights file. "
+                                                                                               "The recommended usage for HDF5 conversion is not to use this option and to load the weights into "
+                                                                                               "the Keras model using `Model.load_weights()` with `by_name = True`.")
+    parser.add_argument('-u', '--skip_unknown', action='store_true', default=False, help="This option is only relevant if the output format is HDF5. Skip layer types that are unknown to the "
+                                                                                         "converter. It is recommended to try using the converter without this option first, then check whether the "
+                                                                                         "converted weights work correctly or not, and only use this option in case they don't.")
+    parser.add_argument('-b', '--backend', action='store', type=str, default='tf', choices={'tf'}, help="This option is only relevant if the output format is HDF5. For which Keras backend to convert the weights. "
+                                                                                              "At the moment the only choice is 'tf' for the TensorFlow backend. %(default)s is also the default value.")
+    parser.add_argument('-v', '--verbose', action='store_true', default=False, help="Prints out the conversion status for every layer.")
+
+    args = parser.parse_args()
+
+    main(args)
