@@ -28,16 +28,11 @@ There are tools out there that attempt to convert both the model definition and 
 * h5py if you want to be able to generate Keras-compatible HDF5 files
 * pickle if you want to be able to generate pickled files
 
-The bad news is that you need to have Caffe with Pycaffe installed to use this converter. The good news is that you don't need to have any clue about how to use Caffe.
+The bad news is that you need to have Caffe with Pycaffe installed to use this converter. The good news is that you don't need to have any clue about how to use Caffe, it just needs to be installed.
 
 ### How to use it
 
 #### 1. Command line interface
-
-The command line interface takes three positional arguments in this order:
-* `out_file`: The desired file name (including path) for the output file without the file extension. The file extension will be added by the converter and is `.h5` for HDF5 files and `.pkl` for pickle files.
-* `prototxt`: The `.prototxt` file that contains the Caffe model definition
-* `caffemodel`: The `.caffemodel` file that contains the weights for the Caffe model
 
 To convert a `.caffemodel` file to a Keras-compatible HDF5 file with verbose console output:
 ```c
@@ -53,6 +48,11 @@ python caffe_weight_converter.py 'desired/name/of/your/output/file/without/file/
                                  'path/to/the/caffe/weights.caffemodel' \
                                  --format=pickle
 ```
+The command line interface takes three positional arguments in this order:
+* `out_file`: The desired file name (including path) for the output file without the file extension. The file extension will be added by the converter and is `.h5` for HDF5 files and `.pkl` for pickle files.
+* `prototxt`: The `.prototxt` file that contains the Caffe model definition
+* `caffemodel`: The `.caffemodel` file that contains the weights for the Caffe model
+
 For more details about the available options, execute
 ```c
 python caffe_weight_converter.py --help
