@@ -39,7 +39,7 @@ The command line interface takes three positional arguments in this order:
 * `prototxt`: The `.prototxt` file that contains the Caffe model definition
 * `caffemodel`: The `.caffemodel` file that contains the weights for the Caffe model
 
-To convert a `.caffemodel` file to a Keras-compatible HDF5 file with verbose output:
+To convert a `.caffemodel` file to a Keras-compatible HDF5 file with verbose console output:
 ```c
 python caffe_weight_converter.py 'desired/name/of/your/output/file/without/file/extension' \
                                  'path/to/the/caffe/model/definition.prototxt' \
@@ -68,11 +68,11 @@ Read the documentation in [`caffe_weight_converter.py`](caffe_weight_converter.p
 ### Important notes
 
 * The Keras converter supports the TensorFlow backend only at the moment, but Keras provides functions to transform weights from one backend to another. It would be nice to support the Theano format directly, but I don't know enough about Theano to do that. If you're a Theano user and interested in Theano support, let me know.
-* Even though the Keras converter can generally convert the weights of any Caffe layer type, it is not guaranteed to do so correctly for layer types it doesn't know. For example, for layers with multiple weights, it might save the weights in the wrong order, or certain weight tensors may need to be transposed or otherwise processed in a certain way, etc. The Keras converter provides the option to skip layers that it doesn't know. It is recommended that you just try whether the converted weights of an unknown layer work correctly, there is a chance that they will. Of course any layer types that do not have weights (such as Input, ReLU, Pooling, Reshape, etc.) will not cause any issues because the converter doesn't care about them. The currently supported Caffe layer types are:
+* Even though the Keras converter can generally convert the weights of any Caffe layer type, it is not guaranteed to do so correctly for layer types it doesn't know. For example, for layers with multiple weights, it might save the weights in the wrong order, or certain weight tensors may need to be transposed or otherwise processed in a certain way, etc. The Keras converter provides the option to skip layers that it doesn't know. It is recommended that you just try whether the converted weights of an unknown layer work correctly, there is a chance that they will. Of course any layer types that do not have weights (such as Input, ReLU, Pooling, Reshape, etc.) will not cause any issues because the converter doesn't care about them. The currently supported Caffe layer types that have trainable weights are:
+  * BatchNorm (i.e. BatchNorm layer followed by subsequent Scale layer)
   * Convolution
+  * Deconvolution
   * InnerProduct
-  * BatchNorm
-* The `BatchNorm` conversion in the Keras converter has yet to be tested.
 
 ### ToDo
 
