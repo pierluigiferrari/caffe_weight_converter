@@ -1,4 +1,4 @@
-## Caffe Weight Converter
+## Caffe-to-Keras Weight Converter
 ---
 ### Contents
 
