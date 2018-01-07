@@ -94,7 +94,7 @@ def convert_caffemodel_to_keras(output_filename,
             converter. This means that the HDF5 output file will only contain those
             layers of a model that have any weights. This is the recommended usage
             of this converter, but if you really must include all layers
-            in the output file, then set this option to `True`. Defaults to `False`.
+            in the output file, then set this option to `True`.
             Note: If `False`, then you should load the weights into the Keras model
             `by_name = True`, since not all layers are present in the HDF5 file.
         include_unknown_layer_types (bool, optional): If `True`, weights from unknown layer
@@ -106,9 +106,9 @@ def convert_caffemodel_to_keras(output_filename,
             Currently only the TensorFlow backend is supported, but you can simply
             follow the procedure [here](https://github.com/keras-team/keras/wiki/Converting-convolution-kernels-from-Theano-to-TensorFlow-and-vice-versa)
             to convert the resulting TensorFlow backend weights to Theano backend
-            weights. Defaults to `tf`.
+            weights.
         verbose (bool, optional): If `True`, prints out the conversion status for
-            all layers. Defaults to `True`.
+            every layer as well as some stats when the conversion is complete.
 
     Returns:
         None.
@@ -132,7 +132,12 @@ def convert_caffemodel_to_keras(output_filename,
     # Save the layer names in this list.
     layer_names = []
 
-    for i in range(len(caffe_weights_list)):
+    counter_unknown = 0
+    counter_no_weights = 0
+
+    iterator = iter(range(len(caffe_weights_list)))
+
+    for i in iterator:
         layer = caffe_weights_list[i]
         layer_name = layer['name']
         layer_type = layer['type']
@@ -140,14 +145,13 @@ def convert_caffemodel_to_keras(output_filename,
             if layer_type in {'Convolution', 'Deconvolution', 'InnerProduct'}: # If this is a convolution layer or fully connected layer...
                 # Get the kernel and transpose it.
                 kernel = layer['weights'][0]
-                if layer_type == 'Convolution':
-                    # Transpose the kernel from Caffe's `(out_channels, in_channels, filter_height, filter_width)` format
-                    # to TensorFlow's `(filter_height, filter_width, in_channels, out_channels)` format.
+                if layer_type in {'Convolution', 'Deconvolution'}:
+                    # Caffe kernel order for Convolution: `(out_channels, in_channels, filter_height, filter_width)`
+                    # TensorFlow kernel order for Convolution: `(filter_height, filter_width, in_channels, out_channels)`
+                    # Caffe kernel order for Deconvolution: `(in_channels, out_channels, filter_height, filter_width)`
+                    # TensorFlow kernel order for Convolution Transpose: `(filter_height, filter_width, out_channels, in_channels)`
+                    # That is, the transposition order is the same for both layer types.
                     kernel = np.transpose(kernel, (2, 3, 1, 0))
-                if layer_type == 'Deconvolution':
-                    # Transpose the kernel from Caffe's `(out_channels, in_channels, filter_height, filter_width)` format
-                    # to TensorFlow's `(filter_height, filter_width, out_channels, in_channels)` format.
-                    kernel = np.transpose(kernel, (2, 3, 0, 1))
                 if layer_type == 'InnerProduct':
                     # Transpose the kernel from Caffe's `(out_channels, in_channels)` format
                     # to TensorFlow's `(in_channels, out_channels)` format.
@@ -193,13 +197,13 @@ def convert_caffemodel_to_keras(output_filename,
                     gamma = next_layer['weights'][0]
                     weights.append(gamma)
                     weight_names.append('gamma')
-                    if len(next_layer['weights'] == 1):
+                    if (len(next_layer['weights']) == 1):
                         warnings.warn("This 'Scale' layer follows a 'BatchNorm' layer and is expected to have a bias, but it doesn't. Make sure to set `center = False` in the respective Keras batch normalization layer.")
                     else:
                         beta = next_layer['weights'][1]
                         weights.append(beta)
                         weight_names.append('beta')
-                    i += 1 # Increment i since we need to skip the subsequent 'Scale' layer after we're done here.
+                    next(iterator) # Increment the iterator by one since we need to skip the subsequent 'Scale' layer after we're done here.
                 else:
                     warnings.warn("No 'Scale' layer after 'BatchNorm' layer. Make sure to set `scale = False` and `center = False` in the respective Keras batch normalization layer.")
                 weights.append(mean)
@@ -241,6 +245,7 @@ def convert_caffemodel_to_keras(output_filename,
                 layer_names.append(layer_name.encode())
                 if verbose:
                     print("Converted weights for layer '{}' of unknown type '{}'".format(layer_name, layer_type))
+                counter_unknown += 1
             elif (len(layer['weights']) == 0):
                 # Create a group (i.e. folder) named after this layer.
                 group = out.create_group(layer_name)
@@ -253,10 +258,11 @@ def convert_caffemodel_to_keras(output_filename,
                 layer_names.append(layer_name.encode())
                 if verbose:
                     print("Processed layer '{}' of type '{}' which doesn't have any weights".format(layer_name, layer_type))
+                counter_no_weights += 1
             elif verbose:
-                print("Skipped unsupported layer '{}' of type '{}'".format(layer_name, layer_type))
+                print("Skipped layer '{}' of unknown type '{}'".format(layer_name, layer_type))
         elif verbose:
-            print("Skipped layer '{}' of type '{}' because it contains no weights".format(layer_name, layer_type))
+            print("Skipped layer '{}' of type '{}' because it doesn't have any weights".format(layer_name, layer_type))
     # Create the global attributes of this HDF5 file.
     out.attrs.create(name='layer_names', data=np.array(layer_names))
     out.attrs.create(name='backend', data=b'tensorflow')
@@ -268,6 +274,10 @@ def convert_caffemodel_to_keras(output_filename,
     # We're done, close the output file.
     out.close()
     print("Weight conversion complete.")
+    if verbose:
+        print("{} \t layers were processed, out of which:".format(len(layer_names)))
+        print("{} \t were of an unknown layer type".format(counter_unknown))
+        print("{} \t did not have any weights".format(counter_no_weights))
     print('File saved as {}'.format(out_name))
 
 def convert_caffemodel_to_dict(prototxt_filename,
@@ -286,6 +296,8 @@ def convert_caffemodel_to_dict(prototxt_filename,
         out_path (str, optional): The filename (full path, but excluding the file extension)
             under which to save a pickled file with the extracted weights. If `None`,
             then the extracted weights will not be saved to disk.
+        verbose (bool, optional): If `True`, prints out the processing status for
+            every layer.
 
     Returns:
         A list of dictionaries. Each dictionary contains the data for one layer of the
@@ -297,7 +309,7 @@ def convert_caffemodel_to_dict(prototxt_filename,
             'bottoms': The names and shapes of all inputs into the layer.
             'tops':    The names and shapes of all outputs from the layer.
 
-        In case a layer has no weights, the weights list will be empty.
+        In case a layer has no weights, that layer's weights list will be empty.
     '''
     # Load the Caffe net and weights.
     net = caffe.Net(prototxt_filename, 1, weights=caffemodel_filename)
@@ -327,7 +339,7 @@ def convert_caffemodel_to_dict(prototxt_filename,
     del net
 
     if verbose:
-        print("Weight extraction complete.")
+        print("Weight extraction complete. Processed {} layers.".format(len(layer_list)))
 
     if not (out_path is None):
         out_name = '{}.pkl'.format(out_path)
