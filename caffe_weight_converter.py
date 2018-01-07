@@ -73,9 +73,10 @@ def convert_caffemodel_to_keras(output_filename,
        correctly, so be aware of that.
 
     The currently supported (i.e. known) Caffe layer types are:
+    - BatchNorm (i.e. BatchNorm layer followed by subsequent Scale layer)
     - Convolution
+    - Deconvolution
     - InnerProduct
-    - BatchNorm
 
     If your model contains batch normalization layers, make sure that the names of
     the batch normalization layers in the Keras model are the same as the names of the
@@ -136,7 +137,7 @@ def convert_caffemodel_to_keras(output_filename,
         layer_name = layer['name']
         layer_type = layer['type']
         if (len(layer['weights']) > 0) or include_layers_without_weights: # Check whether this is a layer that contains weights.
-            if layer_type in {'Convolution', 'InnerProduct'}: # If this is a convolution layer or fully connected layer...
+            if layer_type in {'Convolution', 'Deconvolution', 'InnerProduct'}: # If this is a convolution layer or fully connected layer...
                 # Get the weights of this layer.
                 kernel = layer['weights'][0]
                 bias = layer['weights'][1]
@@ -144,6 +145,10 @@ def convert_caffemodel_to_keras(output_filename,
                     # Transpose the kernel from Caffe's `(out_channels, in_channels, filter_height, filter_width)` format
                     # to TensorFlow's `(filter_height, filter_width, in_channels, out_channels)` format.
                     kernel = np.transpose(kernel, (2, 3, 1, 0))
+                if layer_type == 'Deconvolution':
+                    # Transpose the kernel from Caffe's `(out_channels, in_channels, filter_height, filter_width)` format
+                    # to TensorFlow's `(filter_height, filter_width, out_channels, in_channels)` format.
+                    kernel = np.transpose(kernel, (2, 3, 0, 1))
                 if layer_type == 'InnerProduct':
                     # Transpose the kernel from Caffe's `(out_channels, in_channels)` format
                     # to TensorFlow's `(in_channels, out_channels)` format.
@@ -195,8 +200,8 @@ def convert_caffemodel_to_keras(output_filename,
                     warnings.warn("No 'Scale' layer after 'BatchNorm' layer. Make sure to set `scale = False` and `center = False` in the respective Keras batch normalization layer.")
                 weights.append(mean)
                 weights.append(variance)
-                weight_names.append('mean')
-                weight_names.append('variance')
+                weight_names.append('moving_mean') # It doesn't have to be a moving mean, but that's what Keras calls this parameter.
+                weight_names.append('moving_variance')  # It doesn't have to be a moving variance, but that's what Keras calls this parameter.
                 # Compose the extended weight names with layer name prefix.
                 extended_weight_names = np.array(['{}/{}:0'.format(layer_name, weight_names[k]).encode() for k in range(len(weight_names))])
                 # Create a group (i.e. folder) named after this layer.
@@ -313,6 +318,9 @@ def convert_caffemodel_to_dict(prototxt_filename,
         layer_list.append(layer)
         if verbose:
             print("Processed layer '{}' of type '{}'".format(layer['name'], layer['type']))
+
+    # Free the occupied resources.
+    del net
 
     if verbose:
         print("Weight extraction complete.")
