@@ -46,7 +46,7 @@ python caffe_weight_converter.py 'desired/name/of/your/output/file/without/file/
                                  'path/to/the/caffe/weights.caffemodel' \
                                  --verbose
 ```
-To extract the weights as Numpy arrays and save them in pickled file along with layer types, names, inputs and outputs:
+To extract the weights as Numpy arrays and save them in a pickled file along with layer types, names, inputs and outputs:
 ```c
 python caffe_weight_converter.py 'desired/name/of/your/output/file/without/file/extension' \
                                  'path/to/the/caffe/model/definition.prototxt' \
@@ -68,7 +68,7 @@ Read the documentation in [`caffe_weight_converter.py`](caffe_weight_converter.p
 ### Important notes
 
 * The Keras converter supports the TensorFlow backend only at the moment, but Keras provides functions to transform weights from one backend to another. It would be nice to support the Theano format directly, but I don't know enough about Theano to do that. If you're a Theano user and interested in Theano support, let me know.
-* Even though the Keras converter can generally convert the weights of any Caffe layer type, it is not guaranteed to do so correctly for layer types it doesn't know. For example, for layers with multiple weights, it might save the weights in the wrong order, or certain weight tensors may need to be transposed or otherwise processed in a certain way, etc. The Keras converter provides the option to skip layers that it doesn't know. It is recommended that you just try whether the converted weights of an unknown layer work correctly, there is a chance that they will. Of course any layer types that do not have weights (such as Input, ReLU, Pooling, Reshape, etc.) will not cause any issues because the converter doesn't care about them. The currently supported Caffe layer types that have trainable weights are:
+* Even though the Keras converter can generally convert the weights of any Caffe layer type, it is not guaranteed to do so correctly for layer types it doesn't know. For example, for layers with multiple weights, it might save the weights in the wrong order, or certain weight tensors may need to be transposed or otherwise processed in a certain way, etc. The Keras converter provides the option to skip layer types that it doesn't know. It is recommended that you just try whether the converted weights of an unknown layer type work correctly, there is a chance that they will. Of course any layer types that do not have weights (such as Input, ReLU, Pooling, Reshape, etc.) will not cause any issues because the converter doesn't care about them. The currently supported Caffe layer types that have trainable weights are:
   * BatchNorm (i.e. BatchNorm layer followed by subsequent Scale layer)
   * Convolution
   * Deconvolution
@@ -76,15 +76,14 @@ Read the documentation in [`caffe_weight_converter.py`](caffe_weight_converter.p
 
 ### ToDo
 
-* Expand support for the Keras converter for other important layer types. If you need a specific layer type to be supported, let me know. Currently on the list:
-  * Deconvolution
+* Expand support for the Keras converter for other layer types. If you need a specific layer type to be supported, let me know.
 * Support the Theano and CNTK backends for the Keras converter.
 
 ### Why it is better to convert weights only, not model definitions
 
 There are a few reasons why I think it makes more sense to have a converter that does't try to translate the model definition, but instead converts the model's weights only:
 
-* Much easier to maintain: Every time that a converter that translates model definitions encounters a layer type it doesn't know, it breaks down. The author of the converter then has to incorporate translation instructions for the new layer type so that the converter will know what to do with it. Since new network architectures lead to new Caffe layer types all the time, and countless models use their own custom layer types, this makes such a converter incredibly tedious to maintain. A converter that converts weights only doesn't have this problem to the same extent. Why? Because
+* Much easier to maintain: Every time that a converter that translates model definitions encounters a layer type it doesn't know, it breaks down. The authors of the converter then have to incorporate translation instructions for the new layer type so that the converter will know what to do with it. Since new network architectures lead to new Caffe layer types all the time, and countless models use their own custom layer types, this makes such a converter incredibly tedious to maintain. A converter that converts weights only doesn't have this problem to the same extent. This is because
   * (1) the vast majority of all layer types in Caffe doesn't have any weights. Think of Input, Split, ReLU, Pooling, or Reshape layers. This means that a converter that converts weights only doesn't have to care about those layers that don't have weights. If tomorrow a new activation function becomes popular (that has no trainable weights), then this converter will still work fine without needing any updates. A converter that tries to translate the model definition will need to be updated in order to know how to translate the new activation function. And
   * (2) even if tomorrow there is a new layer type in Caffe that does have trainable weights, then there is still at least chance that this converter can convert the weights of the new layer type correctly without any update. Weights are just numbers, and the format in which those numbers are arranged might be the same between Caffe and Keras if we are lucky. But there is a zero-percent chance that a converter that tries to translate the new layer type from Caffe to Keras can accidentally do that without any prior updates.
 * Converting the model definition is unnecessary: I don't really care about the model definition being translated automatically for me. I can do that myself relatively easily. I can just look at the `.prototxt` file that defines the Caffe model and maybe at a few `.cpp` source files that define non-standard layer types and write my model in TensorFlow or Keras manually. It might take a while, but it's not that big a deal. What I **cannot** do, however, is manually transcribe the millions of weights from some non-human-readable binary protocol buffer file whose format I don't understand in the slightest. What I really care about is to have a program that gets those weights extracted and converted to the right format for me. Getting the TensorFlow (or whatever framework) graph definition served on a platter is nice to have but secondary.
