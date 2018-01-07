@@ -138,9 +138,8 @@ def convert_caffemodel_to_keras(output_filename,
         layer_type = layer['type']
         if (len(layer['weights']) > 0) or include_layers_without_weights: # Check whether this is a layer that contains weights.
             if layer_type in {'Convolution', 'Deconvolution', 'InnerProduct'}: # If this is a convolution layer or fully connected layer...
-                # Get the weights of this layer.
+                # Get the kernel and transpose it.
                 kernel = layer['weights'][0]
-                bias = layer['weights'][1]
                 if layer_type == 'Convolution':
                     # Transpose the kernel from Caffe's `(out_channels, in_channels, filter_height, filter_width)` format
                     # to TensorFlow's `(filter_height, filter_width, in_channels, out_channels)` format.
@@ -153,8 +152,12 @@ def convert_caffemodel_to_keras(output_filename,
                     # Transpose the kernel from Caffe's `(out_channels, in_channels)` format
                     # to TensorFlow's `(in_channels, out_channels)` format.
                     kernel = np.transpose(kernel, (1, 0))
-                # Set the weight names for this layer type.
-                weight_names = ['kernel', 'bias']
+                # Set the name for the kernel.
+                weight_names = ['kernel']
+                # If this layer has a bias (which does not necessarily have to be the case), add it, too.
+                if (len(layer['weights']) > 1):
+                    bias = layer['weights'][1]
+                    weight_names.append('bias')
                 # Compose the extended weight names with layer name prefix.
                 extended_weight_names = np.array(['{}/{}:0'.format(layer_name, weight_names[k]).encode() for k in range(len(weight_names))])
                 # Create a group (i.e. folder) named after this layer.
@@ -166,7 +169,8 @@ def convert_caffemodel_to_keras(output_filename,
                 subgroup = group.create_group(layer_name)
                 # Create the actual weights datasets.
                 subgroup.create_dataset(name='{}:0'.format(weight_names[0]), data=kernel)
-                subgroup.create_dataset(name='{}:0'.format(weight_names[1]), data=bias)
+                if (len(layer['weights']) > 1):
+                    subgroup.create_dataset(name='{}:0'.format(weight_names[1]), data=bias)
                 # One last thing left to do: Append this layer's name to the global list of layer names.
                 layer_names.append(layer_name.encode())
                 if verbose:
