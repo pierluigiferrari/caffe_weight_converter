@@ -7,7 +7,7 @@
 3. [How to use it](#how-to-use-it)
 4. [Important notes](#important-notes)
 5. [ToDo](#todo)
-6. [Conerted weights](#converted-weights)
+6. [Converted weights](#converted-weights)
 7. [Why it is better to convert weights only, not model definitions](#why-it-is-better-to-convert-weights-only,-not-model-definitions)
 
 ### Overview
