@@ -7,7 +7,8 @@
 3. [How to use it](#how-to-use-it)
 4. [Important notes](#important-notes)
 5. [ToDo](#todo)
-6. [Why it is better to convert weights only, not model definitions](#why-it-is-better-to-convert-weights-only,-not-model-definitions)
+6. [Conerted weights](#converted-weights)
+7. [Why it is better to convert weights only, not model definitions](#why-it-is-better-to-convert-weights-only,-not-model-definitions)
 
 ### Overview
 
@@ -17,6 +18,8 @@ Or
 2. Export the Caffe weights to a pickled file that contains the weights as plain Numpy arrays along with some other information (such as layer types and names for all layers). This format may be useful if you want to load the weights into a deep learning framework other than Keras.
 
 That is, this is mainly a Caffe-to-Keras weight converter, but you can also have it export the weights into a simpler, possibly more familiar Python format (list of dictionaries) instead.
+
+Further below you can also find a list of links to weights for various models that I ported to Keras.
 
 There are tools out there that attempt to convert both the model definition and the weights of a Caffe model to a given other deep learning framework (like the great [`caffe-tensorflow`](https://github.com/ethereon/caffe-tensorflow)), but I don't believe that's the right approach. If you'd like to know why, read below. This program converts the weights only, not the model definition.
 
@@ -78,6 +81,16 @@ Read the documentation in [`caffe_weight_converter.py`](caffe_weight_converter.p
 
 * Expand support for the Keras converter for other layer types. If you need a specific layer type to be supported, let me know.
 * Support the Theano and CNTK backends for the Keras converter.
+
+### Converted weights
+
+I'll post any weights that I ported to Keras here. The filenames of the weight files are always the same as the names of the original `.caffemodel` files from which they were ported.
+
+* [ResNet50](https://drive.google.com/open?id=1mXP3juk-fBFljindLdU0HXikGGZaQ8zP)
+* [ResNet101](https://drive.google.com/open?id=1aGIduyjHqKIE4ZksRAd3OJ_w3-pEmWlA)
+* [ResNet152](https://drive.google.com/open?id=19MYQYMJDuWyIf6hUukwwBteLZLijEb_L)
+* [FCN-8s at-once Pascal](https://drive.google.com/open?id=1eesyNbscB_3ex_P4StW_PWtTwwFUO_nb)
+* [SSD (all original models)](https://github.com/pierluigiferrari/ssd_keras)
 
 ### Why it is better to convert weights only, not model definitions
 
