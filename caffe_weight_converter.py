@@ -132,6 +132,7 @@ def convert_caffemodel_to_keras(output_filename,
     # Save the layer names in this list.
     layer_names = []
 
+    # These counters are just to be able to show some statistics upon completion of the conversion.
     counter_unknown = 0
     counter_no_weights = 0
 
@@ -203,7 +204,8 @@ def convert_caffemodel_to_keras(output_filename,
                         beta = next_layer['weights'][1]
                         weights.append(beta)
                         weight_names.append('beta')
-                    next(iterator) # Increment the iterator by one since we need to skip the subsequent 'Scale' layer after we're done here.
+                    # Increment the iterator by one since we need to skip the subsequent 'Scale' layer after we're done here.
+                    next(iterator)
                 else:
                     warnings.warn("No 'Scale' layer after 'BatchNorm' layer. Make sure to set `scale = False` and `center = False` in the respective Keras batch normalization layer.")
                 weights.append(mean)
