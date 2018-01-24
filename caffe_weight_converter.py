@@ -60,7 +60,7 @@ def convert_caffemodel_to_keras(output_filename,
     cannot perform for layers it doesn't know. Two potential issues come to mind
     for unsupported layer types:
     1) For layers that have multiple weight tensors, the converter will save
-       the weights in the order they have in the Caffe model. If this happens
+       the weight tensors in the order they have in the Caffe model. If this happens
        not to be the same order in which Keras saves the weights for that same
        layer type, then we obviously have a problem. For supported layer types
        it is ensured that the order is correct, but for a given unknown layer
@@ -72,7 +72,13 @@ def convert_caffemodel_to_keras(output_filename,
        might be necessary for the weights of other (unknown) layer types to work
        correctly, so be aware of that.
 
-    The currently supported (i.e. known) Caffe layer types are:
+    Of course any layer types that do not have trainable weights (such as Reshape,
+    ReLU, Split, Concat, Permute, Flatten, Pooling etc.) won't cause any trouble
+    because the converter does not care about them. The possible issues described
+    above might occur only with unknown layer types that do have trainable weights.
+
+    The currently supported (i.e. known) Caffe layer types that do have trainable
+    weights are:
     - BatchNorm (i.e. BatchNorm layer followed by subsequent Scale layer)
     - Convolution
     - Deconvolution
