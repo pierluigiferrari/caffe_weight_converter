@@ -19,7 +19,7 @@ Or
 
 That is, this is mainly a Caffe-to-Keras weight converter, but you can also have it export the weights into a simpler, possibly more familiar Python format (list of dictionaries) instead.
 
-Further below you can also find a list of links to weights for various models that I ported to Keras.
+Further below you can also find a list of links to weights for various models that I ported to Keras using this very converter.
 
 There are tools out there that attempt to convert both the model definition and the weights of a Caffe model to a given other deep learning framework (like the great [`caffe-tensorflow`](https://github.com/ethereon/caffe-tensorflow)), but I don't believe that's the right approach. If you'd like to know why, read below. This program converts the weights only, not the model definition.
 
@@ -71,7 +71,7 @@ Read the documentation in [`caffe_weight_converter.py`](caffe_weight_converter.p
 ### Important notes
 
 * The Keras converter supports the TensorFlow backend only at the moment, but Keras provides functions to transform weights from one backend to another. It would be nice to support the Theano format directly, but I don't know enough about Theano to do that. If you're a Theano user and interested in Theano support, let me know.
-* Even though the Keras converter can generally convert the weights of any Caffe layer type, it is not guaranteed to do so correctly for layer types it doesn't know. For example, for layers with multiple weights, it might save the weights in the wrong order, or certain weight tensors may need to be transposed or otherwise processed in a certain way, etc. The Keras converter provides the option to skip layer types that it doesn't know. It is recommended that you just try whether the converted weights of an unknown layer type work correctly, there is a chance that they will. Of course any layer types that do not have weights (such as Input, ReLU, Pooling, Reshape, etc.) will not cause any issues because the converter doesn't care about them. The currently supported Caffe layer types that have trainable weights are:
+* Even though the Keras converter can generally convert the weights of any Caffe layer type, it is not guaranteed to do so correctly for layer types it doesn't know. For example, for layers that have multiple weight tensors, it might save the weight tensors in the wrong order, or certain weight tensors may need to be transposed or otherwise processed in a certain way, etc. The Keras converter provides the option to skip layer types that it doesn't know. It is recommended that you just try whether the converted weights of an unknown layer type work correctly, there is a chance that they will. Of course any layer types that do not have weights (such as Input, ReLU, Pooling, Reshape, etc.) will not cause any issues because the converter doesn't care about them. The currently supported Caffe layer types that have trainable weights are:
   * BatchNorm (i.e. BatchNorm layer followed by subsequent Scale layer)
   * Convolution
   * Deconvolution
