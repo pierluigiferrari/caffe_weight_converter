@@ -76,6 +76,7 @@ Read the documentation in [`caffe_weight_converter.py`](caffe_weight_converter.p
   * Convolution
   * Deconvolution
   * InnerProduct
+  * PReLU (Parametric ReLU)
 
 ### ToDo
 
