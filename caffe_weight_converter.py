@@ -401,7 +401,7 @@ def convert_caffemodel_to_dict(prototxt_filename,
     return layer_list
 
 
-def main(argv):
+def convert_caffe_weights(argv):
     if argv.format == 'hdf5':
         convert_caffemodel_to_keras(output_filename=argv.out_file,
                                     prototxt_filename=argv.prototxt,
@@ -443,4 +443,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(args)
+    convert_caffe_weights(args)
