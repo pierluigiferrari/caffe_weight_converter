@@ -323,13 +323,13 @@ def convert_caffemodel_to_keras(output_filename,
     out.attrs.create(name='keras_version', data=b'2.0.8')
     # We're done, close the output file.
     out.close()
-    print("Weight conversion complete.")
     if verbose:
+        print("Weight conversion complete.")
         print("{} \t layers were processed, out of which:".format(len(layer_names)))
         print("{} \t were of an unknown layer type".format(counter_unknown))
         print("{} \t did not have any weights".format(counter_no_weights))
         print('Unkown layer types of this model: ', unknown_layers_types)
-    print('File saved as {}'.format(out_name))
+        print('File saved as {}'.format(out_name))
 
 
 def convert_caffemodel_to_dict(prototxt_filename,
@@ -396,7 +396,8 @@ def convert_caffemodel_to_dict(prototxt_filename,
         out_name = '{}.pkl'.format(out_path)
         with open(out_name, 'wb') as f:
             pickle.dump(layer_list, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print('File saved as {}.'.format(out_name))
+        if verbose:
+            print('File saved as {}.'.format(out_name))
 
     return layer_list
 
