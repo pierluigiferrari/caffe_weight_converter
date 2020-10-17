@@ -33,6 +33,7 @@ try:
 except ImportError:
     warning.warn("'h5py' module is missing. You can export the weights to a pickle file only.")
 
+
 def convert_caffemodel_to_keras(output_filename,
                                 prototxt_filename,
                                 caffemodel_filename,
@@ -144,10 +145,14 @@ def convert_caffemodel_to_keras(output_filename,
 
     iterator = iter(range(len(caffe_weights_list)))
 
+    # Array with the list of types of unkown layers
+    unknown_layers_types = []
+
     for i in iterator:
         layer = caffe_weights_list[i]
         layer_name = layer['name']
         layer_type = layer['type']
+
         if (len(layer['weights']) > 0) or include_layers_without_weights: # Check whether this is a layer that contains weights.
             if layer_type in {'Convolution', 'Deconvolution', 'InnerProduct'}: # If this is a convolution layer or fully connected layer...
                 # Get the kernel and transpose it.
@@ -186,6 +191,35 @@ def convert_caffemodel_to_keras(output_filename,
                 layer_names.append(layer_name.encode())
                 if verbose:
                     print("Converted weights for layer '{}' of type '{}'".format(layer_name, layer_type))
+
+            elif layer['type'] == 'PReLU':
+                # Caffe PReLU layers have one parameter for each neuron, Keras wants one for each activation
+                # So I copy each neuron's parameter for each activation "belonging" to that neuron
+                original_params = layer['weights'][0]
+                top_shape = layer['tops'][0][1] # layer['tops'] is an array with one tuple containing name and shape of the top layer
+                adapted_shape_params = np.zeros((top_shape[2], top_shape[3], top_shape[1]))
+                for n in range(top_shape[1]):
+                    # for each neuron...
+                    for s in range(top_shape[2]):
+                        for t in range(top_shape[3]):
+                            adapted_shape_params[s][t][n] = original_params[n]
+                weight_names = ['params']
+                # Compose the extended weight names with layer name prefix.
+                extended_weight_names = np.array(['{}/{}:0'.format(layer_name, weight_names[k]).encode() for k in range(len(weight_names))])
+                # Create a group (i.e. folder) named after this layer.
+                group = out.create_group(layer_name)
+                # Create a weight names attribute for this group, which is just a list of the names of the weights
+                # that this layer is expected to have in the Keras model.
+                group.attrs.create(name='weight_names', data=extended_weight_names)
+                # Create a subgroup (i.e. subfolder) in which to save the weights of this layer.
+                subgroup = group.create_group(layer_name)
+                # Create the actual weights datasets.
+                subgroup.create_dataset(name='{}:0'.format(weight_names[0]), data=adapted_shape_params)
+                # One last thing left to do: Append this layer's name to the global list of layer names.
+                layer_names.append(layer_name.encode())
+                if verbose:
+                    print("Converted weights for layer '{}' of type '{}'".format(layer_name, layer_type))
+
             elif layer['type'] == 'BatchNorm': # If this is a batch normalization layer...
                 # Caffe has a batch normalization layer, but it doesn't apply a scaling factor or bias
                 # after normalizing. Instead, the 'BatchNorm' layer must be followed by a 'Scale' layer
@@ -234,7 +268,11 @@ def convert_caffemodel_to_keras(output_filename,
                 layer_names.append(layer_name.encode())
                 if verbose:
                     print("Converted weights for layer '{}' of type '{}'".format(layer_name, layer_type))
+
             elif (len(layer['weights']) > 0) and include_unknown_layer_types: # For all other (unsupported) layer types...
+                if layer_type not in unknown_layers_types:
+                    unknown_layers_types.append(layer_type)
+
                 # Set the weight names for this layer type.
                 weight_names = ['weights_{}'.format(i) for i in range(len(layer['weights']))]
                 # Compose the extended weight names with layer name prefix.
@@ -254,6 +292,7 @@ def convert_caffemodel_to_keras(output_filename,
                 if verbose:
                     print("Converted weights for layer '{}' of unknown type '{}'".format(layer_name, layer_type))
                 counter_unknown += 1
+
             elif (len(layer['weights']) == 0):
                 # Create a group (i.e. folder) named after this layer.
                 group = out.create_group(layer_name)
@@ -267,10 +306,13 @@ def convert_caffemodel_to_keras(output_filename,
                 if verbose:
                     print("Processed layer '{}' of type '{}' which doesn't have any weights".format(layer_name, layer_type))
                 counter_no_weights += 1
+
             elif verbose:
                 print("Skipped layer '{}' of unknown type '{}'".format(layer_name, layer_type))
+
         elif verbose:
             print("Skipped layer '{}' of type '{}' because it doesn't have any weights".format(layer_name, layer_type))
+
     # Create the global attributes of this HDF5 file.
     out.attrs.create(name='layer_names', data=np.array(layer_names))
     out.attrs.create(name='backend', data=b'tensorflow')
@@ -281,12 +323,14 @@ def convert_caffemodel_to_keras(output_filename,
     out.attrs.create(name='keras_version', data=b'2.0.8')
     # We're done, close the output file.
     out.close()
-    print("Weight conversion complete.")
     if verbose:
+        print("Weight conversion complete.")
         print("{} \t layers were processed, out of which:".format(len(layer_names)))
         print("{} \t were of an unknown layer type".format(counter_unknown))
         print("{} \t did not have any weights".format(counter_no_weights))
-    print('File saved as {}'.format(out_name))
+        print('Unkown layer types of this model: ', unknown_layers_types)
+        print('File saved as {}'.format(out_name))
+
 
 def convert_caffemodel_to_dict(prototxt_filename,
                                caffemodel_filename,
@@ -331,8 +375,7 @@ def convert_caffemodel_to_dict(prototxt_filename,
         # Store the layer type.
         layer['type'] = net.layers[li].type
         # Store the layer weights. In case the layer has no weights, this list will be empty.
-        layer['weights'] = [net.layers[li].blobs[bi].data[...]
-                            for bi in range(len(net.layers[li].blobs))]
+        layer['weights'] = [net.layers[li].blobs[bi].data[...] for bi in range(len(net.layers[li].blobs))]
         # Store the names and shapes of each input to this layer (aka "bottom").
         layer['bottoms'] = [(net._blob_names[bi], net.blobs[net._blob_names[bi]].data.shape)
                              for bi in list(net._bottom_ids(li))]
@@ -353,11 +396,13 @@ def convert_caffemodel_to_dict(prototxt_filename,
         out_name = '{}.pkl'.format(out_path)
         with open(out_name, 'wb') as f:
             pickle.dump(layer_list, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print('File saved as {}.'.format(out_name))
+        if verbose:
+            print('File saved as {}.'.format(out_name))
 
     return layer_list
 
-def main(argv):
+
+def convert_caffe_weights(argv):
     if argv.format == 'hdf5':
         convert_caffemodel_to_keras(output_filename=argv.out_file,
                                     prototxt_filename=argv.prototxt,
@@ -371,6 +416,7 @@ def main(argv):
                                        caffemodel_filename=argv.caffemodel,
                                        out_path=argv.out_file,
                                        verbose=argv.verbose)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=('Converts `.caffemodel` weights to either of '
@@ -398,4 +444,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(args)
+    convert_caffe_weights(args)
